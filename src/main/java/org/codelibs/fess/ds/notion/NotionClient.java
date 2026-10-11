@@ -543,13 +543,13 @@ public class NotionClient implements Closeable {
                 if (attempt < maxRetryCount) {
                     final long waitMillis = backoffMillis(attempt + 1);
                     logger.warn("Retrying Notion API request '{}' (attempt {}) after a transport error: {}; waiting {} ms.", path,
-                            attempt + 1, e.getMessage(), waitMillis);
+                            attempt + 1, describeCause(e), waitMillis);
                     sleep(waitMillis);
                     continue;
                 }
-                logger.warn("Exhausted {} {} on Notion API request '{}' after transport errors.", maxRetryCount,
-                        maxRetryCount == 1 ? "retry" : "retries", path);
-                throw new NotionApiException(path, 0, "transport_error", e.getMessage(), false);
+                logger.warn("Exhausted {} {} on Notion API request '{}' after transport errors; the last one was: {}", maxRetryCount,
+                        maxRetryCount == 1 ? "retry" : "retries", path, describeCause(e));
+                throw new NotionApiException(path, 0, "transport_error", describeCause(e), false);
             }
             try (response) {
                 final int status = response.getHttpStatusCode();
@@ -585,6 +585,23 @@ public class NotionClient implements Closeable {
                 throw new NotionDataStoreException("Failed to close a Notion API response for " + path + ".", e);
             }
         }
+    }
+
+    /**
+     * Describes a transport failure for a log or exception message. {@code CurlException} wraps
+     * the real I/O failure and says only "Failed to process a request.", so the root cause --
+     * a timeout, a reset, a refused connection -- is what tells the operator what happened.
+     */
+    private static String describeCause(final Throwable e) {
+        Throwable root = e;
+        for (int depth = 0; root.getCause() != null && root.getCause() != root && depth < 10; depth++) {
+            root = root.getCause();
+        }
+        final String message = e.getMessage();
+        if (root == e) {
+            return message;
+        }
+        return message + " (cause: " + root.getClass().getName() + ": " + root.getMessage() + ")";
     }
 
     private JsonNode parseJson(final String content, final String path) {
