@@ -274,6 +274,62 @@ public class NotionClientTest extends UnitDsTestCase {
         }
     }
 
+    /**
+     * The retry and exhaustion messages must name the underlying failure, not only curl4j's
+     * generic "Failed to process a request." -- here a connection that is refused.
+     */
+    @Test
+    public void test_transportError_messagesNameTheCause_connectionRefused() {
+        NotionClient.setEndpoint("http://127.0.0.1:1/");
+        final TestLogAppender log = TestLogAppender.attachTo(NotionClient.class);
+        try {
+            final DataStoreParams paramMap = new DataStoreParams();
+            paramMap.put("token", "secret_abc");
+            paramMap.put("request_interval", "0");
+            paramMap.put("max_retry_count", "1");
+            paramMap.put("connection_timeout", "1000");
+            paramMap.put("read_timeout", "1000");
+            try {
+                new NotionClient(paramMap).getPage("P1");
+                fail("a persistent transport error must still throw once retries are exhausted");
+            } catch (final NotionApiException e) {
+                assertTrue(e.getMessage(), e.getMessage().contains("ConnectException"));
+            }
+            final List<String> warnings = log.messagesAt(org.apache.logging.log4j.Level.WARN);
+            assertEquals(warnings.toString(), 2, warnings.size());
+            for (final String warning : warnings) {
+                assertTrue(warning, warning.contains("ConnectException"));
+            }
+        } finally {
+            log.detach();
+            NotionClient.setEndpoint(server.getEndpoint());
+        }
+    }
+
+    /**
+     * A server that accepts the connection and never answers: the read timeout must be named.
+     */
+    @Test
+    public void test_transportError_messagesNameTheCause_readTimeout() throws Exception {
+        try (java.net.ServerSocket silent = new java.net.ServerSocket(0, 5, java.net.InetAddress.getLoopbackAddress())) {
+            NotionClient.setEndpoint("http://127.0.0.1:" + silent.getLocalPort() + "/");
+            final DataStoreParams paramMap = new DataStoreParams();
+            paramMap.put("token", "secret_abc");
+            paramMap.put("request_interval", "0");
+            paramMap.put("max_retry_count", "0");
+            paramMap.put("connection_timeout", "1000");
+            paramMap.put("read_timeout", "300");
+            try {
+                new NotionClient(paramMap).getPage("P1");
+                fail("a read timeout must throw");
+            } catch (final NotionApiException e) {
+                assertTrue(e.getMessage(), e.getMessage().contains("SocketTimeoutException"));
+            }
+        } finally {
+            NotionClient.setEndpoint(server.getEndpoint());
+        }
+    }
+
     @Test
     public void test_negativeMaxRetryCount_fallsBackToDefault() {
         final DataStoreParams paramMap = new DataStoreParams();
