@@ -2,6 +2,12 @@ Notion Data Store for Fess
 [![Java CI with Maven](https://github.com/codelibs/fess-ds-notion/actions/workflows/maven.yml/badge.svg)](https://github.com/codelibs/fess-ds-notion/actions/workflows/maven.yml)
 ==========================
 
+> [!NOTE]
+> **Experimental.** This data store debuts in Fess 15.9 as an experimental release. It has not yet
+> been tested across a wide range of environments, so parameters and behavior may change in
+> upcoming releases. Feedback from real-world use will drive its improvements - please share your
+> experience in [GitHub Issues](https://github.com/codelibs/fess-ds-notion/issues).
+
 ## Overview
 
 Notion Data Store is an extension for Fess Data Store Crawling. It authenticates as a Notion
