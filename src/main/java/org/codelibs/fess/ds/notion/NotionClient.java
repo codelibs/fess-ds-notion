@@ -171,7 +171,8 @@ public class NotionClient implements Closeable {
      * @throws NotionDataStoreException if {@code token} is missing
      */
     public NotionClient(final DataStoreParams paramMap) {
-        token = paramMap.getAsString(TOKEN_PARAM, StringUtil.EMPTY);
+        // A pasted secret often carries a trailing newline or space, which Notion answers with a fatal 401.
+        token = paramMap.getAsString(TOKEN_PARAM, StringUtil.EMPTY).trim();
         if (token.isEmpty()) {
             throw new NotionDataStoreException("Parameter " + TOKEN_PARAM + " is required.");
         }

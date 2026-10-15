@@ -57,6 +57,28 @@ public class NotionClientTest extends UnitDsTestCase {
     }
 
     @Test
+    public void test_token_surroundingWhitespaceIsTrimmed() {
+        server.enqueue("/v1/pages/P1", NotionApiMockServer.json("{\"object\":\"page\",\"id\":\"P1\"}"));
+        final NotionClient client = server.newClient(" secret_abc\n");
+
+        client.getPage("P1");
+
+        assertEquals(List.of("Bearer secret_abc"), server.getAuthorizations("/v1/pages/P1"));
+    }
+
+    @Test
+    public void test_constructor_blankTokenIsRejected() {
+        final DataStoreParams paramMap = new DataStoreParams();
+        paramMap.put("token", "  ");
+        try {
+            new NotionClient(paramMap);
+            fail("a blank token must be rejected");
+        } catch (final NotionDataStoreException e) {
+            // expected
+        }
+    }
+
+    @Test
     public void test_headers_authorizationAndVersion() {
         server.enqueue("/v1/pages/P1", NotionApiMockServer.json("{\"object\":\"page\",\"id\":\"P1\"}"));
         final NotionClient client = server.newClient("secret_abc");

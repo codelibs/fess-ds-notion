@@ -19,6 +19,11 @@ unresolved page comments.
 
 See [Maven Repository](https://maven.codelibs.org/release/org/codelibs/fess/fess-ds-notion/).
 
+## Requirements
+
+- Fess 15.9 or later
+- Java 21 or later
+
 ## Installation
 
 1. Download fess-ds-notion-X.X.X.jar
@@ -29,14 +34,14 @@ See [Maven Repository](https://maven.codelibs.org/release/org/codelibs/fess/fess
 ### Parameters
 Example:
 ```
-token=secret_************************************
+token=ntn_************************************
 ```
 
 | Key | Default | Value |
 | --- | --- | --- |
 | `token` | *(required)* | The internal integration secret ("Internal Integration Secret" on the integration's Configuration page). Never copied into the script evaluation context or logged. |
-| `root_page_ids` | *(empty)* | Comma-separated page IDs to crawl from. Leave both this and `database_ids` empty to discover every page and database shared with the integration via search instead. |
-| `database_ids` | *(empty)* | Comma-separated database IDs to crawl from. Each database is resolved to its data source(s), and every row of each is indexed. |
+| `root_page_ids` | *(empty)* | Comma-separated page IDs (not URLs) to crawl from. Leave both this and `database_ids` empty to discover every page and database shared with the integration via search instead. |
+| `database_ids` | *(empty)* | Comma-separated database IDs (not URLs) to crawl from. Each database is resolved to its data source(s), and every row of each is indexed. |
 | `include_comments` | `true` | `true` or `false`. Fetches each page's unresolved comments and folds their text into `notion.content`/`notion.comments`. Requires the integration's "Read comments" capability; see below. |
 | `include_files` | `true` | `true` or `false`. Downloads and extracts Notion-hosted `file`/`pdf` block attachments, indexing each as its own document. |
 | `max_file_size` | `10485760` (10MB) | An attachment larger than this many bytes is skipped entirely (not indexed, not even with empty content). |
@@ -52,6 +57,10 @@ A blank or non-numeric value for any numeric parameter above falls back to its d
 warning logged; so does a negative `max_retry_count`/`request_interval` (`0` is valid for both:
 "never retry" and "no pacing", respectively) and a `true`/`false` parameter set to anything other
 than those two values (case-insensitive).
+
+The crawl is single-threaded and every run is a full crawl: `number_of_threads`, `readInterval` and
+`script_type` are not used, and there is no incremental crawl. Requests go straight to
+`api.notion.com`; HTTP proxies are not supported.
 
 ### Crawl scope and discovery
 
@@ -92,9 +101,8 @@ than those two values (case-insensitive).
   outage from a permanent one, so it does not guess by aborting the whole crawl over it. Any other
   error fetching a page's own blocks (for example a `400`) still fails that whole page, rather than
   indexing it with silently missing content.
-- Every per-document failure is recorded under **Crawler > Failure URL** using that document's own
-  URL (a page's Notion URL, `<page url>#<block id>` for an attachment, or a database id for a
-  database that failed to resolve). A Notion-hosted attachment's signed download URL is never used
+- Every per-document failure is recorded under **Crawler > Failure URL**, identified by the page or
+  data source id, or by `<page url>#<block id>` for an attachment. A Notion-hosted attachment's signed download URL is never used
   for this, and never appears in a log line either -- only the document identity above does.
 - One case beyond `401`/blocked-`429` also aborts: `POST /v1/search` failing while neither
   `root_page_ids` nor `database_ids` is configured. With no configured roots, a broken search
@@ -125,7 +133,7 @@ under a single `notion` root object.
 | `notion.mimetype` | `text/html` for a page; the attachment's detected MIME type for a file. |
 | `notion.created_time` | The page's creation timestamp. Not present on an attachment document. |
 | `notion.last_edited_time` | The page's (or the attachment block's) last-edited timestamp. |
-| `notion.created_by` | The page's creator: their name if Notion returned one, otherwise their user id. Not present on an attachment document. |
+| `notion.created_by` | The page's creator: their name if Notion returned one, otherwise their user id (for these two fields Notion normally returns only the id). Not present on an attachment document. |
 | `notion.last_edited_by` | The last editor, formatted the same way. Not present on an attachment document. |
 | `notion.parent_id` | The id of the page's parent page, database, data source, or block; empty for a page parented directly on the workspace. Not present on an attachment document. |
 | `notion.properties` | A map of database column name to formatted text, for a database row. Empty for a normal page. Not present on an attachment document. |
@@ -152,9 +160,9 @@ Configure these on the integration's Configuration page before crawling:
 
 | Capability | Required | Used for |
 | --- | --- | --- |
-| Read content | Always | Reading pages, blocks, databases, and data source rows. Without it, every request fails with `401 unauthorized` and the crawl aborts immediately. |
+| Read content | Always | Reading pages, blocks, databases, and data source rows. Without it, Notion answers `403 restricted_resource`; every page is then skipped individually and nothing is indexed. |
 | Read comments | Only if `include_comments=true` (the default) | Fetching page comments. Missing this capability answers `403`; this data store logs one warning and disables comment crawling for the rest of that crawl rather than failing it. |
-| Read user information | Optional | Resolving a user id (`created_by`/`last_edited_by`, `people` properties) to a display name. Without it, Notion still returns the user id, and this data store falls back to indexing the id instead of a name. |
+| Read user information | Optional | Resolving a user id in `people` properties to a display name. Without it, Notion still returns the user id, and this data store falls back to indexing the id instead of a name. |
 
 The integration must also be explicitly shared with (added to) every page or database it should
 crawl -- adding a capability alone does not grant access to any content.
