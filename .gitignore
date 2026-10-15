@@ -16,6 +16,7 @@
 /.settings/
 .project
 .classpath
+.factorypath
 *.iml
 .idea
 .DS_Store
