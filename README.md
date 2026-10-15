@@ -58,8 +58,8 @@ warning logged; so does a negative `max_retry_count`/`request_interval` (`0` is 
 "never retry" and "no pacing", respectively) and a `true`/`false` parameter set to anything other
 than those two values (case-insensitive).
 
-The crawl is single-threaded and every run is a full crawl: `number_of_threads`, `readInterval` and
-`script_type` are not used, and there is no incremental crawl. Requests go straight to
+The crawl is single-threaded and every run is a full crawl: `number_of_threads` and `readInterval`
+are not used, and there is no incremental crawl. Requests go straight to
 `api.notion.com`; HTTP proxies are not supported.
 
 ### Crawl scope and discovery
@@ -110,6 +110,12 @@ The crawl is single-threaded and every run is a full crawl: `number_of_threads`,
   is instead recorded and skipped, like any other database resolution failure).
 
 ### Scripts
+
+Fess 15.9 evaluates data store scripts with the `script_type` parameter, and an unset
+`script_type` resolves to `groovy`, which is not bundled with Fess 15.9. Either add
+`script_type=javascript` to the parameters or install the `fess-script-groovy` plugin; the
+example below works with both.
+
 Example:
 ```
 title=notion.title
