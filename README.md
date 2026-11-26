@@ -74,9 +74,11 @@ are not used, and there is no incremental crawl. Requests go straight to
   document is indexed -- never whether its descendants are discovered.** A page's blocks are
   always walked (to find `child_page`/`child_database` references) before the pattern is checked
   against that page's own URL, so an excluded page's children are still crawled and indexed under
-  their own URLs. The same holds when a page fails outright for some other reason: its
-  already-discovered children are not lost along with it. If you want an entire subtree excluded,
-  the pattern must match every URL under it, not just its root.
+  their own URLs. Likewise, an excluded page's attachments are still checked against their own
+  `<page url>#<block id>` URLs, so `include_pattern=.*#.*` indexes attachments only. When a page
+  fails outright for some other reason, its already-discovered children are not lost along with it
+  either. If you want an entire subtree excluded, the pattern must match every URL under it,
+  not just its root.
 - A page or database row that is in Notion's trash is skipped.
 - A database row's properties beyond 25 `relation`/`people` references are completed via an extra
   API call per property; this only happens for a property that actually needs it. A property whose
