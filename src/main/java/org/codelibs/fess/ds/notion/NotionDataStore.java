@@ -351,7 +351,9 @@ public class NotionDataStore extends AbstractDataStore {
      * enqueued survives even if this page is then filtered out or fails outright: include/exclude
      * and a later failure decide only whether <em>this</em> page is indexed, never whether its
      * descendants are discovered. Discovering it first and then dropping it, the previous order,
-     * silently lost every descendant of a filtered-out or failing page.
+     * silently lost every descendant of a filtered-out or failing page. Attachments follow the same
+     * rule: each is checked against its own URL, so a filtered-out page's attachments are still
+     * processed.
      * </p>
      */
     private void processPage(final DataConfig dataConfig, final IndexUpdateCallback callback, final DataStoreParams paramMap,
@@ -385,17 +387,20 @@ public class NotionDataStore extends AbstractDataStore {
             }
         }
 
+        final JsonNode properties = page.path("properties");
+        final String title = PropertyFormatter.getTitle(properties);
+
         if (urlFilter != null && !urlFilter.match(url)) {
             if (logger.isDebugEnabled()) {
                 logger.debug("Not matched: {}", url);
             }
             crawlerStatsHelper.discard(statsKey);
+            processAttachments(dataConfig, callback, paramMap, scriptMap, defaultDataMap, client, url, title, blocks, urlFilter,
+                    includeFiles, maxFileSize, ignoreError, scriptType);
             return;
         }
         logger.info("Crawling URL: {}", url);
 
-        final JsonNode properties = page.path("properties");
-        final String title = PropertyFormatter.getTitle(properties);
         final Map<String, String> propertiesText = PropertyFormatter.format(client, pageId, properties);
 
         final String commentsText =
@@ -431,11 +436,20 @@ public class NotionDataStore extends AbstractDataStore {
 
         callback.store(paramMap, dataMap);
 
-        if (includeFiles) {
-            for (final AttachmentRef ref : blocks.getAttachments()) {
-                processAttachment(dataConfig, callback, paramMap, scriptMap, defaultDataMap, client, url, title, ref, urlFilter,
-                        maxFileSize, ignoreError, scriptType);
-            }
+        processAttachments(dataConfig, callback, paramMap, scriptMap, defaultDataMap, client, url, title, blocks, urlFilter, includeFiles,
+                maxFileSize, ignoreError, scriptType);
+    }
+
+    private void processAttachments(final DataConfig dataConfig, final IndexUpdateCallback callback, final DataStoreParams paramMap,
+            final Map<String, String> scriptMap, final Map<String, Object> defaultDataMap, final NotionClient client, final String pageUrl,
+            final String pageTitle, final BlockTextExtractor.Result blocks, final UrlFilter urlFilter, final boolean includeFiles,
+            final long maxFileSize, final boolean ignoreError, final String scriptType) {
+        if (!includeFiles) {
+            return;
+        }
+        for (final AttachmentRef ref : blocks.getAttachments()) {
+            processAttachment(dataConfig, callback, paramMap, scriptMap, defaultDataMap, client, pageUrl, pageTitle, ref, urlFilter,
+                    maxFileSize, ignoreError, scriptType);
         }
     }
 
@@ -478,8 +492,8 @@ public class NotionDataStore extends AbstractDataStore {
 
     /**
      * Downloads and extracts one Notion-hosted file/PDF attachment and indexes it as its own
-     * document. It never fails the containing page, which was already indexed by the time this
-     * runs.
+     * document. It never fails the containing page, which was already indexed (or filtered out)
+     * by the time this runs.
      *
      * <p>
      * <b>{@code ref.url()} -- the signed, time-limited download URL -- must never reach a log, an

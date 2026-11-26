@@ -562,6 +562,43 @@ public class NotionDataStoreTest extends UnitDsTestCase {
     }
 
     /**
+     * include/exclude is checked against each attachment's own URL ({@code <page url>#<block id>}),
+     * not inherited from the containing page: a page filtered out by {@code include_pattern} must
+     * not take its attachments down with it when their own URLs match.
+     */
+    @Test
+    public void test_excludedPage_attachmentsStillIndexed() throws Exception {
+        server.enqueue("/v1/pages/PAGE1", NotionApiMockServer.json("""
+                {"object":"page","id":"PAGE1","url":"https://notion.so/PAGE1","in_trash":false,
+                 "created_time":"2026-01-01T00:00:00.000Z","last_edited_time":"2026-01-02T00:00:00.000Z",
+                 "parent":{"type":"workspace","workspace":true},
+                 "properties":{"title":{"id":"title","type":"title","title":[{"plain_text":"Page"}]}}}
+                """));
+        final String fileUrl = server.putFile("notes.txt", "Attachment of a filtered-out page.", "text/plain");
+        server.enqueue("/v1/blocks/PAGE1/children", NotionApiMockServer.json("""
+                {"object":"list","has_more":false,"next_cursor":null,"results":[
+                  {"id":"FILE1","type":"file","last_edited_time":"2026-01-03T00:00:00.000Z","has_children":false,
+                    "file":{"type":"file","file":{"url":"%s"},"name":"notes.txt"}}
+                ]}
+                """.formatted(fileUrl)));
+
+        registerRealExtraction();
+
+        final DataStoreParams paramMap = newParamMap("secret_token");
+        paramMap.put("root_page_ids", "PAGE1");
+        paramMap.put("include_pattern", ".*#.*");
+
+        final TestIndexUpdateCallback callback = new TestIndexUpdateCallback();
+        dataStore.storeData(new DataConfig(), callback, paramMap, defaultScriptMap(), new HashMap<>());
+
+        assertEquals("only the attachment matches include_pattern; the page itself must not be indexed", 1, callback.size());
+        final Map<String, Object> fileDoc = callback.getDataMaps().get(0);
+        assertEquals("file", fileDoc.get("type"));
+        assertEquals("https://notion.so/PAGE1#FILE1", fileDoc.get("url"));
+        assertTrue(((String) fileDoc.get("content")).contains("Attachment of a filtered-out page."));
+    }
+
+    /**
      * The regression test for the "never leak the signed download URL" fix: a download failure
      * (here, a 404 from the mock file server -- a URL {@code putFile} was never called for) must
      * be recorded under the document identity ({@code <page url>#<block id>}), never the signed
